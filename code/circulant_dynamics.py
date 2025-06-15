@@ -300,7 +300,8 @@ class SimpleRLExperimentRunner:
 
         cumulative_reward = 0
         cumulative_avg = []
-        c = 2.0  # UCB exploration parameter
+        c = 2.0
+          # UCB exploration parameter
 
         for t in range(1, self.T+1):
             # Calculate UCB values for each arm based on current state
@@ -415,7 +416,7 @@ class SimpleRLExperimentRunner:
 
     def create_performance_plot(self, avg_curves, std_curves):
         """Create and save the performance comparison plot"""
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(6, 4))
         
         algorithms = ['optimal', 'two_timescale', 'qwic', 'wiql', 'adaptive_wiql']
         colors = ['green', 'blue', 'red', 'purple', 'orange']
@@ -426,7 +427,7 @@ class SimpleRLExperimentRunner:
             mean_curve = avg_curves[alg]
             std_curve = std_curves[alg]
             
-            plt.plot(mean_curve, label=label, color=color, linewidth=2.5, linestyle=style)
+            plt.plot(mean_curve, label=label, color=color, linewidth=3.0, linestyle=style)
             
             # Add confidence intervals for learning algorithms (not optimal)
             if alg != 'optimal':
@@ -435,11 +436,11 @@ class SimpleRLExperimentRunner:
                                mean_curve + std_curve, 
                                alpha=0.2, color=color)
         
-        plt.xlabel("Time Step", fontsize=14)
-        plt.ylabel("Cumulative Average Reward", fontsize=14)
-        plt.title(f"Algorithm Comparison ({self.num_runs} runs average)", fontsize=16)
+        plt.xlabel("Time Step", fontsize=16)
+        plt.ylabel("Cumulative Average Reward", fontsize=16)
+        #plt.title(f"{self.N},{self.M}", fontsize=16)
         plt.legend(fontsize=14)
-        plt.tick_params(axis='both', labelsize=14)
+        plt.tick_params(axis='both', labelsize=16)
         plt.grid(True, alpha=0.3)
         plt.xlim(0, self.T)
         plt.tight_layout()
@@ -462,7 +463,7 @@ def main():
     parser.add_argument('--time-steps', type=int, default=10000, help='Time steps per run (default: 10000)')
     parser.add_argument('--arms', type=int, default=5, help='Number of arms (default: 50)')
     parser.add_argument('--active-arms', type=int, default=1, help='Number of active arms per step (default: 10)')
-    parser.add_argument('--name', type=str, default='whittle_index_comparison', help='Experiment name (default: whittle_index_comparison)')
+    parser.add_argument('--name', type=str, default='Circulant dynamics', help='Experiment name (default: whittle_index_comparison)')
     
     args = parser.parse_args()
     

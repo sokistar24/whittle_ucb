@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simplified Multi-run RL Algorithm Comparison - Plot Only
+Multi-run Mentorship Bandit Experiment - Plot Only
 Runs experiments multiple times and saves only the performance comparison plot
 """
 
@@ -11,8 +11,8 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-class SimpleRLExperimentRunner:
-    def __init__(self, results_dir="results", num_runs=2, experiment_name="Circulant_dynamics"):
+class MentorshipBanditExperimentRunner:
+    def __init__(self, results_dir="results", num_runs=5, experiment_name="mentorship_bandit_comparison"):
         self.results_dir = Path(results_dir)
         self.num_runs = num_runs
         self.experiment_name = experiment_name
@@ -20,46 +20,72 @@ class SimpleRLExperimentRunner:
         
         print(f"Running {num_runs} experiments...")
         
-        # Environment parameters
-        self.states = [0, 1, 2, 3]
-        self.actions = [0, 1]  # 0: passive, 1: active
-        self.reward_dict = {0: -1, 1: 0, 2: 0, 3: 1}
+        # Environment Setup (Mentorship Problem)
+        self.states = list(range(10))  # 10 levels: 0 to 9
+        self.actions = [0, 1]          # 0: passive, 1: active
         
-        # True transition matrices
-        self.P0 = np.array([
-            [0.5, 0.0, 0.0, 0.5],
-            [0.5, 0.5, 0.0, 0.0],
-            [0.0, 0.5, 0.5, 0.0],
-            [0.0, 0.0, 0.5, 0.5]
-        ])
+        # Reward is state-dependent: R(x) = sqrt(x+1) / sqrt(10)
+        self.reward_dict = {x: np.sqrt(x + 1) / np.sqrt(10) for x in self.states}
         
-        self.P1 = np.array([
-            [0.5, 0.5, 0.0, 0.0],
-            [0.0, 0.5, 0.5, 0.0],
-            [0.0, 0.0, 0.5, 0.5],
-            [0.5, 0.0, 0.0, 0.5]
-        ])
+        # P1: Active transitions (mentored)
+        self.P1 = np.zeros((10, 10))
+        for s in range(10):
+            if s == 0:
+                self.P1[s][s] = 0.3
+                self.P1[s][s + 1] = 0.7
+            elif s == 9:
+                self.P1[s][s - 1] = 0.3
+                self.P1[s][s] = 0.7
+            else:
+                self.P1[s][s - 1] = 0.3
+                self.P1[s][s + 1] = 0.7
         
-        # Known optimal Whittle indices for comparison
-        self.optimal_index = {0: -0.5, 1: 0.5, 2: 1.0, 3: -1.0}
+        # P0: Passive transitions (not mentored)
+        self.P0 = np.zeros((10, 10))
+        for s in range(10):
+            if s == 0:
+                self.P0[s][s] = 0.7
+                self.P0[s][s + 1] = 0.3
+            elif s == 9:
+                self.P0[s][s - 1] = 0.7
+                self.P0[s][s] = 0.3
+            else:
+                self.P0[s][s - 1] = 0.7
+                self.P0[s][s + 1] = 0.3
+        
+        # Known optimal Whittle indices from mentorship output (Level 1 to 10)
+        # Mapping state 0 → Level 1, ..., state 9 → Level 10
+        self.optimal_index = {
+            0: 0.397789,
+            1: 0.663193,
+            2: 0.753384,
+            3: 0.791904,
+            4: 0.813068,
+            5: 0.827976,
+            6: 0.846313,
+            7: 0.844727,
+            8: 0.425415,
+            9: 0.052246
+        }
         
         # Simulation parameters (will be updated in main)
-        self.N = 5       # number of arms
-        self.M = 1       # number of arms activated per time step
-        self.T = 10000    # total time steps
-        self.gamma = 0.99 # discount factor
+        self.N = 100     # number of arms
+        self.M = 20      # number of arms activated per time step
+        self.T = 10000   # total time steps
+        self.gamma = 0.99
 
     def sample_next_state(self, s, a):
+        """Sample next state based on action and current state"""
         probs = self.P1[s] if a == 1 else self.P0[s]
         return np.random.choice(self.states, p=probs)
 
     def simulate_optimal(self):
-        """Optimal policy simulation for baseline comparison"""
+        """Optimal policy using true Whittle indices"""
         X = [random.choice(self.states) for _ in range(self.N)]
         cumulative_reward = 0
         cumulative_avg = []
 
-        for t in range(self.T):
+        for t in range(1, self.T+1):
             priorities = [self.optimal_index[X[i]] for i in range(self.N)]
             active_arms = np.argsort(priorities)[-self.M:]
             A = [1 if i in active_arms else 0 for i in range(self.N)]
@@ -73,13 +99,14 @@ class SimpleRLExperimentRunner:
                 step_reward += r
                 X_next[i] = self.sample_next_state(s, a)
             cumulative_reward += step_reward
-            cumulative_avg.append(cumulative_reward / (t+1))
+            cumulative_avg.append(cumulative_reward / t)
             X = X_next.copy()
 
         return np.array(cumulative_avg)
 
     def simulate_two_timescale(self):
-        """Two-timescale stochastic approximation algorithm (WIQL-AB)"""
+        """Two-timescale stochastic approximation algorithm"""
+        # Initialize arm states
         X = [random.choice(self.states) for _ in range(self.N)]
 
         # Initialize Q-functions: Q[arm][state][action][target_state]
@@ -105,6 +132,22 @@ class SimpleRLExperimentRunner:
 
         cumulative_reward = 0
         cumulative_avg = []
+
+        # Step size sequences from paper
+        C = 1.0      # Constant for fast timescale (α)
+        C_prime = 1.0  # Constant for slow timescale (β)
+
+        def alpha_t(n):
+            """Fast timescale step size: a(n) = C/⌊n/500⌋"""
+            return C / max(1, int(n / 500))
+
+        def beta_t(n):
+            """Slow timescale step size: b(n) = C'/(1 + ⌊n log n/500⌋) if n mod N = 0"""
+            if n % self.N == 0:  # Only update on specific timesteps
+                return C_prime / (1 + int(n * np.log(max(2, n)) / 500))
+            else:
+                return 0  # No update on other timesteps
+
         epsilon = 0.1  # Exploration probability
 
         for t in range(1, self.T+1):
@@ -133,22 +176,32 @@ class SimpleRLExperimentRunner:
 
                 # Update local clock
                 local_clocks[s][a] += 1
-                alpha = 0.02
+
+                # Fast timescale step size based on local clock
+                alpha = alpha_t(local_clocks[s][a])
 
                 # Q-learning update for each target state k (fast timescale)
                 for k in self.states:
+                    # Current Q-value
                     old_q = Q[i][s][a][k]
+
+                    # TD target: r - λ(k)*a + γ*max_v Q(s',v,k)
                     current_lambda = lambda_est[k]
                     max_q_next = max(Q[i][s_next][v][k] for v in self.actions)
                     td_target = r - current_lambda * a + self.gamma * max_q_next
+
+                    # Q-update (fast timescale)
                     Q[i][s][a][k] = old_q + alpha * (td_target - old_q)
 
             # Whittle index updates (slow timescale)
-            beta = 0.005
-            if beta > 0:
+            beta = beta_t(t)
+            if beta > 0:  # Only update when β(n) > 0
                 for k in self.states:
+                    # Average Q-values across all arms for state k
                     q_active = np.mean([Q[i][k][1][k] for i in range(self.N)])
                     q_passive = np.mean([Q[i][k][0][k] for i in range(self.N)])
+
+                    # Update λ(k) to make Q(k,1,k) ≈ Q(k,0,k)
                     lambda_est[k] += beta * (q_active - q_passive)
 
             cumulative_reward += step_reward
@@ -158,7 +211,7 @@ class SimpleRLExperimentRunner:
         return np.array(cumulative_avg)
 
     def simulate_QWIC(self):
-        """QWIC algorithm (WIQL-Fu) with grid search"""
+        """QWIC algorithm with grid search"""
         X = [random.choice(self.states) for _ in range(self.N)]
         lambda_grid = np.linspace(-1.25, 1.25, 10)
 
@@ -248,7 +301,7 @@ class SimpleRLExperimentRunner:
         return np.array(cumulative_avg)
 
     def simulate_WIQL(self):
-        """WIQL algorithm (WIQL-BAVT) with visit-count based learning rates"""
+        """WIQL algorithm with visit-count based learning rates"""
         X = [random.choice(self.states) for _ in range(self.N)]
         Q = [{s: {a: 0.0 for a in self.actions} for s in self.states} for _ in range(self.N)]
         counts = [{s: {a: 0 for a in self.actions} for s in self.states} for _ in range(self.N)]
@@ -292,7 +345,8 @@ class SimpleRLExperimentRunner:
         return np.array(cumulative_avg)
 
     def simulate_adaptive_WIQL_UCB(self):
-        """Adaptive WIQL with UCB exploration (WIQL-UCB)"""
+        """Adaptive WIQL with UCB exploration"""
+        # Initialize
         X = [random.choice(self.states) for _ in range(self.N)]
         Q = np.zeros((self.N, len(self.states), len(self.actions)))
         counts = np.zeros((self.N, len(self.states), len(self.actions)))
@@ -300,7 +354,8 @@ class SimpleRLExperimentRunner:
 
         cumulative_reward = 0
         cumulative_avg = []
-        c = 1.0  # UCB exploration parameter
+
+        c = 2.0  # UCB exploration parameter
 
         for t in range(1, self.T+1):
             # Calculate UCB values for each arm based on current state
@@ -310,10 +365,11 @@ class SimpleRLExperimentRunner:
                 # Calculate UCB for both actions
                 ucb_action_values = np.zeros(len(self.actions))
                 for a in range(len(self.actions)):
+                    # Add exploration bonus based on UCB formula
                     if counts[i, s, a] > 0:
                         exploration = c * np.sqrt(np.log(t + 1) / counts[i, s, a])
                     else:
-                        exploration = c * np.sqrt(np.log(t + 1))
+                        exploration = c * np.sqrt(np.log(t + 1))  # Large value when count = 0
                     ucb_action_values[a] = Q[i, s, a] + exploration
 
                 # Whittle index with UCB bonus
@@ -334,7 +390,7 @@ class SimpleRLExperimentRunner:
 
                 # Update counts and compute adaptive learning rate
                 counts[i, s, a] += 1
-                alpha = 1.0 / counts[i, s, a]
+                alpha = 1.0 / counts[i, s, a]  # Visit-count based learning rate
 
                 s_next = self.sample_next_state(s, a)
                 X_next[i] = s_next
@@ -405,17 +461,25 @@ class SimpleRLExperimentRunner:
         print(f"\nFinal Performance Summary (last 1000 steps, mean ± std):")
         final_window = 1000
         algorithms = ['optimal', 'two_timescale', 'qwic', 'wiql', 'adaptive_wiql']
-        labels = ['Optimal', 'WIQL-AB', 'WIQL-Fu', 'WIQL-BAVT', 'WIQL-UCB']
+        labels = ['Optimal', 'Two-Timescale', 'QWIC', 'WIQL', 'Adaptive WIQL-UCB']
         
         for alg, label in zip(algorithms, labels):
             final_means = [curve[-final_window:].mean() for curve in all_curves[alg]]
             final_mean = np.mean(final_means)
             final_std = np.std(final_means)
-            print(f"  {label:12}: {final_mean:.6f} ± {final_std:.6f}")
+            print(f"  {label:18}: {final_mean:.6f} ± {final_std:.6f}")
+        
+        # Print problem characteristics
+        print(f"\nMentorship Bandit Problem Characteristics:")
+        print(f"- 10 skill levels (states 0-9)")
+        print(f"- Rewards: R(x) = sqrt(x+1) / sqrt(10)")
+        print(f"- Active mode (mentored): higher probability of skill improvement")
+        print(f"- Passive mode (not mentored): lower probability of skill improvement")
+        print(f"- True Whittle indices available for optimal policy")
 
     def create_performance_plot(self, avg_curves, std_curves):
         """Create and save the performance comparison plot"""
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(6, 4))
         
         algorithms = ['optimal', 'two_timescale', 'qwic', 'wiql', 'adaptive_wiql']
         colors = ['green', 'blue', 'red', 'purple', 'orange']
@@ -437,7 +501,7 @@ class SimpleRLExperimentRunner:
         
         plt.xlabel("Time Step", fontsize=14)
         plt.ylabel("Cumulative Average Reward", fontsize=14)
-        plt.title(f"{self.N},{self.M}", fontsize=16)
+        #plt.title(f"Mentorship Problem ({self.num_runs} runs, N={self.N}, M={self.M})", fontsize=16)
         plt.legend(fontsize=14)
         plt.tick_params(axis='both', labelsize=14)
         plt.grid(True, alpha=0.3)
@@ -456,27 +520,27 @@ class SimpleRLExperimentRunner:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run simplified RL algorithm comparison (plot only)')
+    parser = argparse.ArgumentParser(description='Run mentorship bandit algorithm comparison (plot only)')
     parser.add_argument('--runs', type=int, default=5, help='Number of runs (default: 5)')
     parser.add_argument('--results-dir', type=str, default='results', help='Results directory (default: results)')
     parser.add_argument('--time-steps', type=int, default=10000, help='Time steps per run (default: 10000)')
-    parser.add_argument('--arms', type=int, default=5, help='Number of arms (default: 50)')
-    parser.add_argument('--active-arms', type=int, default=1, help='Number of active arms per step (default: 10)')
-    parser.add_argument('--name', type=str, default='Circulant dynamics', help='Experiment name (default: whittle_index_comparison)')
+    parser.add_argument('--arms', type=int, default=100, help='Number of arms (default: 100)')
+    parser.add_argument('--active-arms', type=int, default=20, help='Number of active arms per step (default: 20)')
+    parser.add_argument('--name', type=str, default='mentorship_bandit_comparison', help='Experiment name (default: mentorship_bandit_comparison)')
     
     args = parser.parse_args()
     
-    print("=" * 60)
-    print("SIMPLIFIED RL ALGORITHM COMPARISON")
-    print("=" * 60)
+    print("=" * 70)
+    print("MENTORSHIP BANDIT ALGORITHM COMPARISON")
+    print("=" * 70)
     print(f"Experiment: {args.name}")
     print(f"Runs: {args.runs} | Time steps: {args.time_steps}")
     print(f"Arms: {args.arms} | Active arms: {args.active_arms}")
     print("Algorithms: Optimal, WIQL-AB, WIQL-Fu, WIQL-BAVT, WIQL-UCB")
-    print("=" * 60)
+    print("=" * 70)
     
     # Initialize experiment runner with custom name
-    runner = SimpleRLExperimentRunner(
+    runner = MentorshipBanditExperimentRunner(
         results_dir=args.results_dir, 
         num_runs=args.runs,
         experiment_name=args.name
@@ -490,10 +554,10 @@ def main():
     # Run experiments and create plot
     runner.run_all_experiments_and_plot()
     
-    print("=" * 60)
+    print("=" * 70)
     print(f"EXPERIMENT COMPLETED!")
-    print(f"Filename pattern: {args.name}_N{args.arms}_M{args.active_arms}_T{args.time_steps}_runs{args.runs}.png")
-    print("=" * 60)
+    print(f"Filename: {args.name}_N{args.arms}_M{args.active_arms}_T{args.time_steps}_runs{args.runs}.png")
+    print("=" * 70)
 
 
 if __name__ == "__main__":
