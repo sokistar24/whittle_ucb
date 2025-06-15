@@ -75,7 +75,7 @@ class HeterogeneousBanditExperimentRunner:
         group = self.arm_categories[arm_idx]
 
         # Switch dynamics at halfway point (currently disabled with t >= T)
-        if t >= self.T:  # This condition means switching never happens during simulation
+        if t >= self.T//2:  # This condition means switching never happens during simulation
             if group == 0:  # Group A now follows B's dynamics
                 return np.random.choice(5, p=self.P_B_passive[s])
             elif group == 1:  # Group B now follows A's dynamics

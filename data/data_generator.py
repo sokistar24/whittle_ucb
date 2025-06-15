@@ -27,13 +27,13 @@ class TemperatureDataGenerator:
         self.time_steps = 50000
         self.num_nodes = 30
         self.z_mean = 20.0  # Mean temperature for all nodes
-        self.A_i = 10       # Amplitude for all nodes
+        self.A_i = 5       # Amplitude for all nodes
         
         # Category parameters
         self.categories = {
             'A': {'nodes': range(1, 11), 'P_i': 500, 'sigma_i': 0.1},  # Category A: nodes 1-10
-            'B': {'nodes': range(11, 21), 'P_i': 400, 'sigma_i': 0.2}, # Category B: nodes 11-20
-            'C': {'nodes': range(21, 31), 'P_i': 300, 'sigma_i': 0.3}  # Category C: nodes 21-30
+            'B': {'nodes': range(11, 21), 'P_i': 200, 'sigma_i': 0.2}, # Category B: nodes 11-20
+            'C': {'nodes': range(21, 31), 'P_i': 50, 'sigma_i': 0.3}  # Category C: nodes 21-30
         }
 
     def generate_temperature_data(self):
@@ -205,7 +205,7 @@ def main():
     parser.add_argument('--time-steps', type=int, default=50000, help='Number of time steps (default: 50000)')
     parser.add_argument('--nodes', type=int, default=30, help='Number of sensor nodes (default: 30)')
     parser.add_argument('--mean-temp', type=float, default=20.0, help='Mean temperature in °C (default: 20.0)')
-    parser.add_argument('--amplitude', type=float, default=10.0, help='Temperature amplitude in °C (default: 10.0)')
+    parser.add_argument('--amplitude', type=float, default=5.0, help='Temperature amplitude in °C (default: 10.0)')
     parser.add_argument('--data-dir', type=str, default='data', help='Data directory (default: data)')
     parser.add_argument('--results-dir', type=str, default='results', help='Results directory (default: results)')
     parser.add_argument('--filename', type=str, help='Custom CSV filename (default: auto-generated with timestamp)')
