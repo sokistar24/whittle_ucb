@@ -1,6 +1,6 @@
 # Project Repository
 
-This repository contains a collection of Python scripts for various computational and analytical tasks, with a focus on optimization algorithms and policy analysis.
+This work compares the restless multi-armed bandit formulation for various application problems.
 
 ## Files Overview
 
