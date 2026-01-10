@@ -440,114 +440,140 @@ class SensorPolicyComparison:
         
     def create_performance_plots(self, averaged_results, save_plots=True):
         """Create and save performance comparison plots with confidence intervals"""
-        
+
+        # --------------------------------------------------
+        # Colour palette (fixed)
+        # --------------------------------------------------
+        colors = ['#7fc97f', '#beaed4', '#fdc086']  # WIQL-UCB, RR, AoI
+
+        # --------------------------------------------------
         # Plot 1: Cumulative Average Rewards with Confidence Intervals
+        # --------------------------------------------------
         plt.figure(figsize=(6, 4))
-        
-        # Sample every 100 points for cleaner visualization
+
         sample_interval = 100
         time_steps = range(0, len(averaged_results['wiql']['mean_rewards']), sample_interval)
-        
+
         policies = ['wiql', 'round_robin', 'max_age']
-        colors = ['orange', 'green', 'blue']
         labels = ['WIQL-UCB', 'RR', 'AoI']
         linestyles = ['-.', '-', '--']
-        
+
         for policy, color, label, style in zip(policies, colors, labels, linestyles):
             mean_curve = averaged_results[policy]['mean_rewards']
             std_curve = averaged_results[policy]['std_rewards']
-            
-            # Sample for visualization
+
             mean_sampled = [mean_curve[i] for i in time_steps]
             std_sampled = [std_curve[i] for i in time_steps]
-            
-            # Plot mean
-            plt.plot(time_steps, mean_sampled, label=label, linewidth=2.5, 
-                    color=color, linestyle=style)
-            
-            # Add confidence intervals
+
+            plt.plot(
+                time_steps,
+                mean_sampled,
+                label=label,
+                linewidth=2.5,
+                color=color,
+                linestyle=style
+            )
+
             mean_array = np.array(mean_sampled)
             std_array = np.array(std_sampled)
-            plt.fill_between(time_steps, 
-                           mean_array - std_array, 
-                           mean_array + std_array, 
-                           alpha=0.2, color=color)
-        
+
+            plt.fill_between(
+                time_steps,
+                mean_array - std_array,
+                mean_array + std_array,
+                alpha=0.2,
+                color=color
+            )
+
         plt.xlabel("Time Step", fontsize=14)
         plt.ylabel("Cumulative Average Reward", fontsize=14)
-        #plt.title(f"Sensor Policy Performance Comparison ({self.num_runs} runs)", fontsize=16)
         plt.legend(fontsize=14)
         plt.tick_params(axis='both', labelsize=14)
         plt.grid(True, alpha=0.3)
         plt.xlim(0, len(averaged_results['wiql']['mean_rewards']))
-        
         plt.tight_layout()
-        
+
         if save_plots:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             plot1_path = self.results_dir / f"sensor_policy_performance_{self.num_runs}runs_{timestamp}.png"
             plt.savefig(plot1_path, dpi=300, bbox_inches='tight')
             print(f"Performance plot saved to: {plot1_path}")
-        
+
         plt.show()
 
+        # --------------------------------------------------
         # Plot 2: Category Activation Distribution with Error Bars
+        # --------------------------------------------------
         plt.figure(figsize=(7, 5))
-        
+
         categories = ['Category A', 'Category B', 'Category C']
-        
-        # Calculate percentages with error bars
         policy_data = {}
+
         for policy in policies:
             total_mean = sum(averaged_results[policy]['mean_categories'].values())
-            percentages = [averaged_results[policy]['mean_categories'][cat] / total_mean * 100 for cat in categories]
-            
-            # Calculate std for percentages
+            percentages = [
+                averaged_results[policy]['mean_categories'][cat] / total_mean * 100
+                for cat in categories
+            ]
+
             std_values = []
             for cat in categories:
                 cat_std = averaged_results[policy]['std_categories'][cat]
-                cat_mean = averaged_results[policy]['mean_categories'][cat]
-                # Approximate std for percentage
                 std_pct = (cat_std / total_mean) * 100
                 std_values.append(std_pct)
-            
-            policy_data[policy] = {'percentages': percentages, 'std': std_values}
-        
-        # Position for grouped bars
+
+            policy_data[policy] = {
+                'percentages': percentages,
+                'std': std_values
+            }
+
         x = np.arange(len(categories))
         width = 0.3
-        
-        # Plot bars with error bars
+
         for i, (policy, color, label) in enumerate(zip(policies, colors, labels)):
             offset = (i - 1) * width
-            plt.bar(x + offset, policy_data[policy]['percentages'], width, 
-                   yerr=policy_data[policy]['std'], capsize=5,
-                   label=label, color=color, alpha=0.8, 
-                   edgecolor='black', linewidth=0.5)
-            
-            # Add values on top of bars
-            for j, (v, std) in enumerate(zip(policy_data[policy]['percentages'], policy_data[policy]['std'])):
-                plt.text(j + offset, v + std + 0.5, f"{v:.1f}%", 
-                        ha='center', fontsize=10, fontweight='bold')
-        
+
+            plt.bar(
+                x + offset,
+                policy_data[policy]['percentages'],
+                width,
+                yerr=policy_data[policy]['std'],
+                capsize=5,
+                label=label,
+                color=color,
+                alpha=0.85,
+                edgecolor='black',
+                linewidth=0.5
+            )
+
+            for j, (v, std) in enumerate(
+                zip(policy_data[policy]['percentages'], policy_data[policy]['std'])
+            ):
+                plt.text(
+                    j + offset,
+                    v + std + 0.5,
+                    f"{v:.1f}%",
+                    ha='center',
+                    fontsize=10
+                )
+
         plt.xlabel("Node Categories", fontsize=14)
         plt.ylabel("Percentage of Polls (%)", fontsize=14)
-        #plt.title(f"Category Activation Distribution ({self.num_runs} runs, mean ± std)", fontsize=16)
         plt.legend(fontsize=14)
         plt.tick_params(axis='both', labelsize=14)
         plt.xticks(x, categories)
         plt.grid(True, alpha=0.3, axis='y')
-        
         plt.tight_layout()
-        
+
         if save_plots:
             plot2_path = self.results_dir / f"sensor_policy_categories_{self.num_runs}runs_{timestamp}.png"
             plt.savefig(plot2_path, dpi=300, bbox_inches='tight')
             print(f"Category distribution plot saved to: {plot2_path}")
-        
+
         plt.show()
-        
+
         return plot1_path if save_plots else None, plot2_path if save_plots else None
+
 
 
 
